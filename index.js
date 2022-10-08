@@ -15,6 +15,7 @@ app.use(cors());
 async function main() {
     const db = await MongoUtil.connect(MONGO_URI, "tgc_project3_recipeAPI");
     console.log("Connected to database");
+
     app.get('/', function (req, res) {
         res.status(200);
         res.json({
@@ -23,10 +24,8 @@ async function main() {
     })
 
     //search all
-    app.get('/recipes/all/:page', async function (req, res) {
-        let page=req.params.page
-        let totalResults=10*page
-        const allRecipes = await db.collection('recipes').find({}, { projection: { title: 1, cuisine: 1, diet: 1, serves: 1 } }).limit(totalResults).toArray();
+    app.get('/recipes/all', async function (req, res) {
+        const allRecipes = await db.collection('recipes').find({}, { projection: { title: 1, cuisine: 1, diet: 1, serves: 1 } }).toArray();
         res.status(200);
         res.send(allRecipes);
     })
@@ -170,25 +169,33 @@ async function main() {
     // };
 
     //check profile 
-    app.get('/profile', async function (req, res) {
-        let userRecord = await db.collection('users').findOne({ '_id': ObjectId(`${req.user.user_id}`) });
-        res.send(userRecord);
-    })
+    // app.get('/profile', async function (req, res) {
+    //     let userRecord = await db.collection('users').findOne({ '_id': ObjectId(`${req.user.user_id}`) });
+    //     res.send(userRecord);
+    // })
 
     //add recipe
     app.post('/recipes/create', async function (req, res) {
         try {
             let title = req.body.title;
+            let imageURL = req.body.imageURL
             let ingredients = req.body.ingredients;
             let course = req.body.course;
             let cuisine = req.body.cuisine;
             let diet = req.body.diet;
             let serves = Number(req.body.serves);
             let method = req.body.method;
-            if (title.length < 4 || !Array.isArray(ingredients) || !Array.isArray(course) && course.length < 3 || cuisine.length < 3 || diet && diet.length < 3 || !Number.isInteger(serves) || !Array.isArray(method)) {
+            let username= req.body.username;
+            if (title.length < 4 || !imageURL || !Array.isArray(ingredients) || !Array.isArray(course) && course.length < 3 || cuisine.length < 3 || diet && diet.length < 3 || !Number.isInteger(serves) || !Array.isArray(method)) {
                 let message = "";
                 if (title.length < 4) {
                     message = message + "Title must be at least 4 characters. ";
+                }
+                if (!imageURL) {
+                    message = message + "Please upload an image of the dish. ";
+                }
+                if (!req.body.imageURL){
+                    message = message + "Please upload a recipe image. ";
                 }
                 if (!Array.isArray(ingredients)) {
                     message = message + "Please enter ingredients as an array. ";
@@ -215,13 +222,14 @@ async function main() {
             } else {
                 let result = await db.collection('recipes').insertOne({
                     "title": title,
+                    "imageURL": imageURL,
                     "ingredients": ingredients,
                     "course": course,
                     "cuisine": cuisine,
                     "diet": diet,
                     "serves": serves,
                     "method": method,
-                    "user_id": req.user.user_id
+                    "username": username
                 });
                 res.status(201);
                 res.send(result);
@@ -239,12 +247,13 @@ async function main() {
     app.put('/recipes/:id/update', async function (req, res) {
         try {
             let id = req.params.id;
-            let loginUserID = req.user.user_id;
             const recipeRecord = await db.collection('recipes').findOne({ '_id': ObjectId(`${id}`) });
-            if (loginUserID == recipeRecord.user_id) {
                 let message = "";
                 if (req.body.title && req.body.title.length < 4) {
                     message = message + "Title must be at least 4 characters. ";
+                }
+                if (!req.body.imageURL){
+                    message = message + "Please upload an image of the dish. ";
                 }
                 if (req.body.ingredients && !Array.isArray(req.body.ingredients)) {
                     message = message + "Please enter ingredients as an array. ";
@@ -270,7 +279,7 @@ async function main() {
                         "message": message
                     });
                 } else {
-                    let updates = getUpdates.updates(["title", "ingredients", "course", "cuisine", "diet", "serves", "method"], "",req);
+                    let updates = getUpdates.updates(["title", "imageURL", "ingredients", "course", "cuisine", "diet", "serves", "method"], "",req);
                     let results = await db.collection('recipes').updateOne({
                         '_id': ObjectId(req.params.id)
                     }, {
@@ -279,12 +288,6 @@ async function main() {
                     res.status(200);
                     res.send(results);
                 }
-            } else {
-                res.status(401);
-                res.json({
-                    "message": "Unauthorised - you are not the owner of this recipe"
-                });
-            }
         } catch (e) {
             res.status(400);
             res.json({
@@ -298,23 +301,17 @@ async function main() {
     app.delete('/recipes/:id/delete', async function (req, res) {
         try {
             let id = req.params.id;
-            let loginUserID = req.user.user_id;
             const recipeRecord = await db.collection('recipes').findOne({ '_id': ObjectId(`${id}`) });
             if (!recipeRecord) {
                 res.status(400);
                 res.json({
                     "message": "No recipe found"
                 });
-            } else if (loginUserID == recipeRecord.user_id) {
+            } else {
                 await db.collection('recipes').deleteOne({ '_id': ObjectId(id) });
                 res.status(200);
                 res.json({
                     "message": "Recipe deleted!"
-                });
-            } else {
-                res.status(401);
-                res.json({
-                    "message": "Unauthorised - you are not the owner of this recipe"
                 });
             }
         } catch (e) {
@@ -325,133 +322,133 @@ async function main() {
         }
     })
 
-    //add review of recipe
-    app.post('/recipes/:recipeId/reviews/add', async function (req, res) {
-        try {
-            let id = req.params.recipeId;
-            const recipeRecord = await db.collection('recipes').findOne({ '_id': ObjectId(`${id}`) });
-            if (!recipeRecord) {
-                res.status(404);
-                res.json({
-                    "message": "No recipe found"
-                });
-            } else {
-                let title = req.body.title;
-                let rating = parseInt(req.body.rating);
-                let content = req.body.content;
-                if (title.length < 3 || Number.isNaN(rating) || rating < 1 || rating > 5 || content.length < 3) {
-                    message = "";
-                    if (title.length < 3) {
-                        message = message + "Title of review must be at least 3 characters. ";
-                    }
-                    if (Number.isNaN(rating) || rating < 1 || rating > 5) {
-                        message = message + "Please rate the recipe on a scale of 1 to 5. ";
-                    }
-                    if (content.length < 3) {
-                        message = message + "Your review of the recipe must contain at least 3 characters.";
-                    }
-                    res.status(400);
-                    res.json({
-                        "message": message
-                    });
-                } else {
-                    let result = await db.collection('recipes').updateOne({ '_id': ObjectId(`${id}`) },
-                        {
-                            '$push': {
-                                'reviews': {
-                                    '_id': ObjectId(),
-                                    'title': title,
-                                    'rating': rating,
-                                    'content': content,
-                                    'user': {
-                                        '_id': req.user.user_id,
-                                        'email': req.user.email,
-                                    }
-                                }
-                            }
-                        });
-                    res.status(200);
-                    res.send(result);
-                }
-            }
-        } catch (e) {
-            res.status(400);
-            res.json({
-                "message": "Error - Unable to add review to this recipe"
-            });
-        }
-    })
+//     //add review of recipe
+//     app.post('/recipes/:recipeId/reviews/add', async function (req, res) {
+//         try {
+//             let id = req.params.recipeId;
+//             const recipeRecord = await db.collection('recipes').findOne({ '_id': ObjectId(`${id}`) });
+//             if (!recipeRecord) {
+//                 res.status(404);
+//                 res.json({
+//                     "message": "No recipe found"
+//                 });
+//             } else {
+//                 let title = req.body.title;
+//                 let rating = parseInt(req.body.rating);
+//                 let content = req.body.content;
+//                 if (title.length < 3 || Number.isNaN(rating) || rating < 1 || rating > 5 || content.length < 3) {
+//                     message = "";
+//                     if (title.length < 3) {
+//                         message = message + "Title of review must be at least 3 characters. ";
+//                     }
+//                     if (Number.isNaN(rating) || rating < 1 || rating > 5) {
+//                         message = message + "Please rate the recipe on a scale of 1 to 5. ";
+//                     }
+//                     if (content.length < 3) {
+//                         message = message + "Your review of the recipe must contain at least 3 characters.";
+//                     }
+//                     res.status(400);
+//                     res.json({
+//                         "message": message
+//                     });
+//                 } else {
+//                     let result = await db.collection('recipes').updateOne({ '_id': ObjectId(`${id}`) },
+//                         {
+//                             '$push': {
+//                                 'reviews': {
+//                                     '_id': ObjectId(),
+//                                     'title': title,
+//                                     'rating': rating,
+//                                     'content': content,
+//                                     'user': {
+//                                         '_id': req.user.user_id,
+//                                         'email': req.user.email,
+//                                     }
+//                                 }
+//                             }
+//                         });
+//                     res.status(200);
+//                     res.send(result);
+//                 }
+//             }
+//         } catch (e) {
+//             res.status(400);
+//             res.json({
+//                 "message": "Error - Unable to add review to this recipe"
+//             });
+//         }
+//     })
 
-    //update review of recipe
-    app.put('/recipes/:recipeId/reviews/:reviewId/update', async function (req, res) {
-        let recipe_id = req.params.recipeId;
-        let review_id = req.params.reviewId;
-        let loginUserID = req.user.user_id;
-        const reviewRecord = await db.collection('recipes').findOne({ '_id': ObjectId(`${recipe_id}`), 'reviews._id': ObjectId(`${review_id}`), 'reviews.user._id': loginUserID });
-        if (!reviewRecord) {
-            res.status(404);
-            res.json({
-                "message": "No review by you found for this recipe - cannot update"
-            });
-        } else {
-            message = "";
-            if (req.body.title && req.body.title.length < 3) {
-                message = message + "Title of review must be at least 3 characters. ";
-            }
-            if (req.body.rating && (Number.isNaN(parseInt(req.body.rating)) || parseInt(req.body.rating) < 1 || parseInt(req.body.rating) > 5)) {
-                message = message + "Please rate the recipe on a scale of 1 to 5. ";
-            }
-            if (req.body.content && req.body.content.length < 3) {
-                message = message + "Your review of the recipe must contain at least 3 characters.";
-            }
-            if (message != "") {
-                res.status(400);
-                res.json({
-                    "message": message
-                });
-            } else {
-                let updates = getUpdates.updates(['title', 'rating', 'content'], "reviews.$.",req);
-                let result = await db.collection('recipes').updateOne({
-                    '_id': ObjectId(recipe_id),
-                    'reviews._id': ObjectId(review_id),
-                    'user._id': loginUserID
-                }, {
-                    '$set': updates
-                })
-                res.status(200);
-                res.send(result)
-            }
-        }
-    })
+//     //update review of recipe
+//     app.put('/recipes/:recipeId/reviews/:reviewId/update', async function (req, res) {
+//         let recipe_id = req.params.recipeId;
+//         let review_id = req.params.reviewId;
+//         let loginUserID = req.user.user_id;
+//         const reviewRecord = await db.collection('recipes').findOne({ '_id': ObjectId(`${recipe_id}`), 'reviews._id': ObjectId(`${review_id}`), 'reviews.user._id': loginUserID });
+//         if (!reviewRecord) {
+//             res.status(404);
+//             res.json({
+//                 "message": "No review by you found for this recipe - cannot update"
+//             });
+//         } else {
+//             message = "";
+//             if (req.body.title && req.body.title.length < 3) {
+//                 message = message + "Title of review must be at least 3 characters. ";
+//             }
+//             if (req.body.rating && (Number.isNaN(parseInt(req.body.rating)) || parseInt(req.body.rating) < 1 || parseInt(req.body.rating) > 5)) {
+//                 message = message + "Please rate the recipe on a scale of 1 to 5. ";
+//             }
+//             if (req.body.content && req.body.content.length < 3) {
+//                 message = message + "Your review of the recipe must contain at least 3 characters.";
+//             }
+//             if (message != "") {
+//                 res.status(400);
+//                 res.json({
+//                     "message": message
+//                 });
+//             } else {
+//                 let updates = getUpdates.updates(['title', 'rating', 'content'], "reviews.$.",req);
+//                 let result = await db.collection('recipes').updateOne({
+//                     '_id': ObjectId(recipe_id),
+//                     'reviews._id': ObjectId(review_id),
+//                     'user._id': loginUserID
+//                 }, {
+//                     '$set': updates
+//                 })
+//                 res.status(200);
+//                 res.send(result)
+//             }
+//         }
+//     })
 
-    //delete recipe review
-    app.delete("/recipes/:recipeId/reviews/:reviewId/delete", async function (req, res) {
-        let recipe_id = req.params.recipeId;
-        let review_id = req.params.reviewId;
-        let loginUserID = req.user.user_id;
-        const reviewRecord = await db.collection('recipes').findOne({ '_id': ObjectId(`${recipe_id}`), 'reviews._id': ObjectId(`${review_id}`), 'reviews.user._id': loginUserID });
-        if (!reviewRecord) {
-            res.status(404);
-            res.json({
-                "message": "No review by you found for this recipe - cannot delete"
-            });
-        } else {
-            let results = await db.collection('recipes').updateOne({
-                '_id': ObjectId(recipe_id)
-            }, {
-                '$pull': {
-                    'reviews': {
-                        '_id': ObjectId(review_id),
-                        'user._id': loginUserID
-                    }
-                }
-            });
-            res.status(200);
-            res.json({
-                "message":"Review deleted!"
-            });
-        }
-    })
+//     //delete recipe review
+//     app.delete("/recipes/:recipeId/reviews/:reviewId/delete", async function (req, res) {
+//         let recipe_id = req.params.recipeId;
+//         let review_id = req.params.reviewId;
+//         let loginUserID = req.user.user_id;
+//         const reviewRecord = await db.collection('recipes').findOne({ '_id': ObjectId(`${recipe_id}`), 'reviews._id': ObjectId(`${review_id}`), 'reviews.user._id': loginUserID });
+//         if (!reviewRecord) {
+//             res.status(404);
+//             res.json({
+//                 "message": "No review by you found for this recipe - cannot delete"
+//             });
+//         } else {
+//             let results = await db.collection('recipes').updateOne({
+//                 '_id': ObjectId(recipe_id)
+//             }, {
+//                 '$pull': {
+//                     'reviews': {
+//                         '_id': ObjectId(review_id),
+//                         'user._id': loginUserID
+//                     }
+//                 }
+//             });
+//             res.status(200);
+//             res.json({
+//                 "message":"Review deleted!"
+//             });
+//         }
+//     })
 }
 
 main();
