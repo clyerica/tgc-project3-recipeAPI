@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(cors());
 
 async function main() {
-    const db = await MongoUtil.connect(MONGO_URI, "tgc_project2");
+    const db = await MongoUtil.connect(MONGO_URI, "tgc_project3_recipeAPI");
     console.log("Connected to database");
     app.get('/', function (req, res) {
         res.status(200);
@@ -88,95 +88,95 @@ async function main() {
         }
     })
 
-    // user signup  
-    app.post('/users/create', async function (req, res) {
-        let email = req.body.email;
-        let password = req.body.password;
-        let user = await db.collection('users').findOne({
-            'email': req.body.email
-        });
-        if (user) {
-            res.status(400);
-            res.json({
-                'message': "This email already has an account!"
-            });
-        }
-        else if (!email.includes('@') || !email.includes('.') || password.length < 8) {
-            message = "";
-            if (!email.includes('@') || !email.includes('.')) {
-                message = message + "Email address is not valid. "
-            };
-            if (password.length < 8) {
-                message = message + "Password must be 8 or more characters."
-            };
-            res.status(400);
-            res.json({
-                'message': message
-            });
-        }
-        else {
-            let newUser = {
-                "email": req.body.email,
-                "password": req.body.password,
-            };
-            await db.collection('users').insertOne(newUser);
-            res.status(201);
-            res.json({
-                'message': "New user created!"
-            });
-        }
-    })
+    // // user signup  
+    // app.post('/users/create', async function (req, res) {
+    //     let email = req.body.email;
+    //     let password = req.body.password;
+    //     let user = await db.collection('users').findOne({
+    //         'email': req.body.email
+    //     });
+    //     if (user) {
+    //         res.status(400);
+    //         res.json({
+    //             'message': "This email already has an account!"
+    //         });
+    //     }
+    //     else if (!email.includes('@') || !email.includes('.') || password.length < 8) {
+    //         message = "";
+    //         if (!email.includes('@') || !email.includes('.')) {
+    //             message = message + "Email address is not valid. "
+    //         };
+    //         if (password.length < 8) {
+    //             message = message + "Password must be 8 or more characters."
+    //         };
+    //         res.status(400);
+    //         res.json({
+    //             'message': message
+    //         });
+    //     }
+    //     else {
+    //         let newUser = {
+    //             "email": req.body.email,
+    //             "password": req.body.password,
+    //         };
+    //         await db.collection('users').insertOne(newUser);
+    //         res.status(201);
+    //         res.json({
+    //             'message': "New user created!"
+    //         });
+    //     }
+    // })
 
-    // login
-    app.post('/login', async function (req, res) {
-        let user = await db.collection('users').findOne({
-            'email': req.body.email,
-            'password': req.body.password
-        });
-        if (user) {
-            let token = jwt.sign({
-                'email': req.body.email,
-                'user_id': user._id
-            }, process.env.TOKEN_SECRET, {
-                'expiresIn': '1d'
-            });
-            res.json({
-                'accessToken': token
-            });
-        } else {
-            res.status(401);
-            res.json({
-                'message': "Invalid email or password"
-            });
-        }
-    })
+    // // login
+    // app.post('/login', async function (req, res) {
+    //     let user = await db.collection('users').findOne({
+    //         'email': req.body.email,
+    //         'password': req.body.password
+    //     });
+    //     if (user) {
+    //         let token = jwt.sign({
+    //             'email': req.body.email,
+    //             'user_id': user._id
+    //         }, process.env.TOKEN_SECRET, {
+    //             'expiresIn': '1d'
+    //         });
+    //         res.json({
+    //             'accessToken': token
+    //         });
+    //     } else {
+    //         res.status(401);
+    //         res.json({
+    //             'message': "Invalid email or password"
+    //         });
+    //     }
+    // })
 
-    // middleware to check authentication
-    const checkIfAuthenticatedJWT = (req, res, next) => {
-        const authHeader = req.headers.authorization;
-        if (authHeader) {
-            const token = authHeader.split(' ')[1];
+    // // middleware to check authentication
+    // const checkIfAuthenticatedJWT = (req, res, next) => {
+    //     const authHeader = req.headers.authorization;
+    //     if (authHeader) {
+    //         const token = authHeader.split(' ')[1];
 
-            jwt.verify(token, process.env.TOKEN_SECRET, (err, user) => {
-                if (err) {
-                    return res.sendStatus(403);
-                }
-                req.user = user;
-                next();
-            });
-        } else {
-            res.sendStatus(401);
-        }
-    };
+    //         jwt.verify(token, process.env.TOKEN_SECRET, (err, user) => {
+    //             if (err) {
+    //                 return res.sendStatus(403);
+    //             }
+    //             req.user = user;
+    //             next();
+    //         });
+    //     } else {
+    //         res.sendStatus(401);
+    //     }
+    // };
 
     //check profile 
-    app.get('/profile', checkIfAuthenticatedJWT, async function (req, res) {
+    app.get('/profile', async function (req, res) {
         let userRecord = await db.collection('users').findOne({ '_id': ObjectId(`${req.user.user_id}`) });
         res.send(userRecord);
     })
 
     //add recipe
-    app.post('/recipes/create', checkIfAuthenticatedJWT, async function (req, res) {
+    app.post('/recipes/create', async function (req, res) {
         try {
             let title = req.body.title;
             let ingredients = req.body.ingredients;
@@ -236,7 +236,7 @@ async function main() {
     })
 
     //update recipe
-    app.put('/recipes/:id/update', checkIfAuthenticatedJWT, async function (req, res) {
+    app.put('/recipes/:id/update', async function (req, res) {
         try {
             let id = req.params.id;
             let loginUserID = req.user.user_id;
@@ -295,7 +295,7 @@ async function main() {
     })
 
     //delete recipe
-    app.delete('/recipes/:id/delete', checkIfAuthenticatedJWT, async function (req, res) {
+    app.delete('/recipes/:id/delete', async function (req, res) {
         try {
             let id = req.params.id;
             let loginUserID = req.user.user_id;
@@ -326,7 +326,7 @@ async function main() {
     })
 
     //add review of recipe
-    app.post('/recipes/:recipeId/reviews/add', checkIfAuthenticatedJWT, async function (req, res) {
+    app.post('/recipes/:recipeId/reviews/add', async function (req, res) {
         try {
             let id = req.params.recipeId;
             const recipeRecord = await db.collection('recipes').findOne({ '_id': ObjectId(`${id}`) });
@@ -383,7 +383,7 @@ async function main() {
     })
 
     //update review of recipe
-    app.put('/recipes/:recipeId/reviews/:reviewId/update', checkIfAuthenticatedJWT, async function (req, res) {
+    app.put('/recipes/:recipeId/reviews/:reviewId/update', async function (req, res) {
         let recipe_id = req.params.recipeId;
         let review_id = req.params.reviewId;
         let loginUserID = req.user.user_id;
@@ -425,7 +425,7 @@ async function main() {
     })
 
     //delete recipe review
-    app.delete("/recipes/:recipeId/reviews/:reviewId/delete", checkIfAuthenticatedJWT, async function (req, res) {
+    app.delete("/recipes/:recipeId/reviews/:reviewId/delete", async function (req, res) {
         let recipe_id = req.params.recipeId;
         let review_id = req.params.reviewId;
         let loginUserID = req.user.user_id;
